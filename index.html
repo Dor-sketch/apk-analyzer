@@ -104,30 +104,34 @@
                     ? 'Video files detected: ' + videoFiles.join(', ')
                     : 'No video files detected.';
                 report += '\nVideo Files Found:\n' + (videoFiles.length > 0 ? videoFiles.join('\n') : 'None') + '\n';
-// Try to read the AndroidManifest.xml
-let manifestSummary = 'No AndroidManifest.xml found.';
-if (contents.files['AndroidManifest.xml']) {
-    const manifestContent = await contents.file('AndroidManifest.xml').async('uint8array');
 
-    // Convert binary XML to readable format
-    let cleanedManifestContent = '';
-    for (let i = 0; i < manifestContent.length; i++) {
-        if (manifestContent[i] >= 32 && manifestContent[i] <= 126) {
-            cleanedManifestContent += String.fromCharCode(manifestContent[i]);
-        } else {
-            cleanedManifestContent += ' ';
-        }
-    }
+                // Try to read the AndroidManifest.xml
+                let manifestSummary = 'No AndroidManifest.xml found.';
+                if (contents.files['AndroidManifest.xml']) {
+                    const manifestContent = await contents.file('AndroidManifest.xml').async('uint8array');
 
-    report += '\nAndroidManifest.xml (cleaned content):\n' + cleanedManifestContent;
+                    // Convert binary XML to readable format
+                    let cleanedManifestContent = '';
+                    for (let i = 0; i < manifestContent.length; i++) {
+                        if (manifestContent[i] >= 32 && manifestContent[i] <= 126) {
+                            cleanedManifestContent += String.fromCharCode(manifestContent[i]);
+                        } else {
+                            cleanedManifestContent += ' ';
+                        }
+                    }
 
-    // Extract permissions using regex
-    const permissionRegex = /android\.permission\.[A-Z_]+/g;
-    const permissions = cleanedManifestContent.match(permissionRegex) || [];
+                    // Remove spaces between characters
+                    cleanedManifestContent = cleanedManifestContent.replace(/\s+/g, '');
 
-    manifestSummary = `Permissions Analysis:\n${permissions.length > 0 ? [...new Set(permissions)].join(', ') : 'None detected.'}`;
-    report += `\n\nPermissions Found:\n${permissions.length > 0 ? [...new Set(permissions)].join('\n') : 'None'}`;
-}
+                    report += '\nAndroidManifest.xml (cleaned content):\n' + cleanedManifestContent;
+
+                    // Extract permissions using regex
+                    const permissionRegex = /(android\.permission\.[A-Z_]+|[A-Z][a-zA-Z]+Permissions)/g;
+                    const permissions = cleanedManifestContent.match(permissionRegex) || [];
+
+                    manifestSummary = `Permissions Analysis:\n${permissions.length > 0 ? [...new Set(permissions)].join(', ') : 'None detected.'}`;
+                    report += `\n\nPermissions Found:\n${permissions.length > 0 ? [...new Set(permissions)].join('\n') : 'None'}`;
+                }
 
                 // Try to read classes.dex
                 let dexSummary = 'No classes.dex found.';
