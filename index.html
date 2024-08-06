@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APK Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+        #apkFile {
+            display: block;
+            margin: 20px auto;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            display: block;
+            margin: 0 auto;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #summary, #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        #summary h2, #result h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        pre {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>APK Analyzer</h1>
+    <input type="file" id="apkFile" accept=".apk">
+    <button onclick="analyzeAPK()">Analyze APK</button>
+    <div id="summary">
+        <h2>Summary</h2>
+        <div id="summaryContent">No analysis yet.</div>
+    </div>
+    <div id="result">
+        <h2>Full Report</h2>
+        <pre id="reportContent"></pre>
+    </div>
+
+    <script>
+        async function analyzeAPK() {
+            const fileInput = document.getElementById('apkFile');
+            const summaryDiv = document.getElementById('summaryContent');
+            const reportDiv = document.getElementById('reportContent');
+
+            if (!fileInput.files.length) {
+                alert('Please select an APK file');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            summaryDiv.textContent = 'Analyzing...';
+            reportDiv.textContent = '';
+
+            try {
+                const zip = new JSZip();
+                const contents = await zip.loadAsync(file);
+
+                let report = 'APK Contents:\n\n';
+
+                // List files in the APK
+                for (let filename in contents.files) {
+                    report += filename + '\n';
+                }
+
+                // Check for video files
+                const videoExtensions = ['.mp4', '.avi', '.mkv'];
+                const videoFiles = Object.keys(contents.files).filter(filename =>
+                    videoExtensions.some(ext => filename.toLowerCase().endsWith(ext))
+                );
+
+                let videoSummary = videoFiles.length > 0
+                    ? 'Video files detected: ' + videoFiles.join(', ')
+                    : 'No video files detected.';
+                report += '\nVideo Files Found:\n' + (videoFiles.length > 0 ? videoFiles.join('\n') : 'None') + '\n';
+// Try to read the AndroidManifest.xml
+let manifestSummary = 'No AndroidManifest.xml found.';
+if (contents.files['AndroidManifest.xml']) {
+    const manifestContent = await contents.file('AndroidManifest.xml').async('uint8array');
+
+    // Convert binary XML to readable format
+    let cleanedManifestContent = '';
+    for (let i = 0; i < manifestContent.length; i++) {
+        if (manifestContent[i] >= 32 && manifestContent[i] <= 126) {
+            cleanedManifestContent += String.fromCharCode(manifestContent[i]);
+        } else {
+            cleanedManifestContent += ' ';
+        }
+    }
+
+    report += '\nAndroidManifest.xml (cleaned content):\n' + cleanedManifestContent;
+
+    // Extract permissions using regex
+    const permissionRegex = /android\.permission\.[A-Z_]+/g;
+    const permissions = cleanedManifestContent.match(permissionRegex) || [];
+
+    manifestSummary = `Permissions Analysis:\n${permissions.length > 0 ? [...new Set(permissions)].join(', ') : 'None detected.'}`;
+    report += `\n\nPermissions Found:\n${permissions.length > 0 ? [...new Set(permissions)].join('\n') : 'None'}`;
+}
+
+                // Try to read classes.dex
+                let dexSummary = 'No classes.dex found.';
+                if (contents.files['classes.dex']) {
+                    const dexContent = await contents.file('classes.dex').async('uint8array');
+                    report += '\n\nclasses.dex (first 100 bytes):\n' + Array.from(dexContent.slice(0, 100)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+                    // Simple heuristic to detect video playback code (e.g., ExoPlayer, MediaPlayer)
+                    const dexString = new TextDecoder().decode(dexContent);
+                    const videoClasses = ['ExoPlayer', 'MediaPlayer', 'VideoView'];
+                    const networkClasses = ['HttpURLConnection', 'OkHttpClient', 'Socket'];
+
+                    const foundVideoClasses = videoClasses.filter(videoClass => dexString.includes(videoClass));
+                    const foundNetworkClasses = networkClasses.filter(networkClass => dexString.includes(networkClass));
+
+                    dexSummary = `Code Analysis:\nVideo Classes: ${foundVideoClasses.length > 0 ? foundVideoClasses.join(', ') : 'None'}\nNetwork Classes: ${foundNetworkClasses.length > 0 ? foundNetworkClasses.join(', ') : 'None'}`;
+                    report += `\n\nVideo Classes Found:\n${foundVideoClasses.length > 0 ? foundVideoClasses.join('\n') : 'None'}`;
+                    report += `\n\nNetwork Classes Found:\n${foundNetworkClasses.length > 0 ? foundNetworkClasses.join('\n') : 'None'}`;
+                }
+
+                summaryDiv.innerHTML = `
+                    <strong>Video Files:</strong> ${videoSummary}<br>
+                    <strong>Manifest Permissions:</strong><br>${manifestSummary.replace(/\n/g, '<br>')}<br>
+                    <strong>Code Analysis:</strong><br>${dexSummary.replace(/\n/g, '<br>')}
+                `;
+                reportDiv.textContent = report;
+            } catch (error) {
+                summaryDiv.textContent = `Error: ${error.message}`;
+                reportDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APK Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #result { margin-top: 20px; border: 1px solid #ccc; padding: 10px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>APK Analyzer</h1>
+    <input type="file" id="apkFile" accept=".apk">
+    <button onclick="analyzeAPK()">Analyze APK</button>
+    <div id="result"></div>
+
+    <script>
+        async function analyzeAPK() {
+            const fileInput = document.getElementById('apkFile');
+            const resultDiv = document.getElementById('result');
+
+            if (!fileInput.files.length) {
+                alert('Please select an APK file');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            resultDiv.textContent = 'Analyzing...';
+
+            try {
+                const zip = new JSZip();
+                const contents = await zip.loadAsync(file);
+
+                let result = 'APK Contents:\n\n';
+
+                // List files in the APK
+                for (let filename in contents.files) {
+                    result += filename + '\n';
+                }
+
+                // Try to read the AndroidManifest.xml
+                if (contents.files['AndroidManifest.xml']) {
+                    const manifestContent = await contents.file('AndroidManifest.xml').async('string');
+                    result += '\nAndroidManifest.xml (raw content):\n' + manifestContent;
+                }
+
+                // Try to read classes.dex
+                if (contents.files['classes.dex']) {
+                    const dexContent = await contents.file('classes.dex').async('uint8array');
+                    result += '\n\nclasses.dex (first 100 bytes):\n' + Array.from(dexContent.slice(0, 100)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                }
+
+                resultDiv.textContent = result;
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
